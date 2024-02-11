@@ -1,0 +1,4 @@
+config/__nginx.config
+node_modules
+load_test
+executar-teste-local.sh
