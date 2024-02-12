@@ -11,20 +11,20 @@ const pool = new pg.Pool({
 
 pool.on('error', connect);
 
-async function connect() {
+const client = async function connect() {
     try {
-        await pool.connect();
+        const client = await pool.connect();
         console.log(`Connected to db ${URL}`);
+        return client;
     } catch (err) {
         console.error(`Error connecting to db: ${err}`);
         setTimeout(connect, 3000); // Retry connection after 3 seconds
     }
-}
+};
 
 connect();
 
 module.exports.insertTransaction = async function (account_id, amount, description, transaction_type) {
-    const client = await pool.connect(); // Inicia uma conexão de cliente
     try {
         await client.query('BEGIN');
 
@@ -64,8 +64,8 @@ module.exports.insertTransaction = async function (account_id, amount, descripti
 module.exports.getBalanceByAccountId = async function (account_id) {
     const query = `
         SELECT
-            a.limit_amount AS limite,
-            b.amount AS total
+            a.limit_amount,
+            b.amount
         FROM accounts a
         JOIN balances b ON a.id = b.account_id
         WHERE a.id = $1;
@@ -77,9 +77,9 @@ module.exports.getBalanceByAccountId = async function (account_id) {
 module.exports.getTransactionsByAccountId = async function (account_id) {
     const query = `
         SELECT
-            amount,
-            transaction_type,
-            description,
+            amount AS valor,
+            transaction_type AS tipo,
+            description AS descricao,
             date AS realizada_em
         FROM transactions
         WHERE account_id = $1
