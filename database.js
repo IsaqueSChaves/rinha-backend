@@ -26,9 +26,8 @@ connect();
 module.exports.insertTransaction = async function (account_id, amount, description, transaction_type) {
     const client = await pool.connect(); // Inicia uma conexão de cliente
     try {
-        await client.query('BEGIN'); // Inicia a transação
+        await client.query('BEGIN');
 
-        // CTE para atualizar o saldo e retornar os valores atualizados
         const updateBalanceQuery = `
             WITH updated_balance AS (
                 UPDATE balances
@@ -45,20 +44,15 @@ module.exports.insertTransaction = async function (account_id, amount, descripti
             JOIN accounts a ON a.id = $2
         `;
 
-        // Calcula o valor de ajuste de acordo com o tipo de transação
         const adjustAmount = transaction_type === 'c' ? amount : -amount;
 
         const { rows: [result] } = await client.query(updateBalanceQuery, [adjustAmount, account_id, amount, description, transaction_type]);
 
-        // Verifica se o saldo resultante excede o limite
         if (transaction_type === 'd' && result.saldo < -result.limite) {
             throw new Error('Saldo insuficiente para realizar a transação.');
         }
-
-        await client.query('COMMIT'); // Confirma a transação
-
-        return result; // Retorna o saldo e limite atualizados
-
+        await client.query('COMMIT');
+        return result;
     } catch (err) {
         await client.query('ROLLBACK'); // Desfaz a transação em caso de erro
         throw err;

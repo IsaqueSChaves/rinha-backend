@@ -1,5 +1,5 @@
 const express = require('express');
-const { insertTransaction, count, findById, findByTerm } = require('./database');
+const { insertTransaction, getBalanceByAccountId } = require('./database');
 const { validationFilter, errorHandler } = require('./middleware');
 const bodyParser = require('body-parser');
 const cluster = require('cluster');
@@ -25,20 +25,21 @@ app.post('/clientes/:id/transacoes', validationFilter, (req, res, _) => {
 
 app.get('/clientes/:id/extrato', async (req, res, _) => {
     try {
-        let { accountId } = req.params;
-        accountId = +accountId;
+        const { id } = req.params;
+        const accountId = +id;
         console.log(accountId);
         // if (isNaN(accountId)) return res.status(404).end();
 
-        const accountDetails = await getAccountDetailsById(accountId);
+        // Promisse All
+        // const accountDetails = await getAccountDetailsById(accountId);
         // if (!accountDetails) return res.status(404).end();
 
         const balanceDetails = await getBalanceByAccountId(accountId);
         // if (!balanceDetails) return res.status(404).end();
-
-        const recentTransactions = await getRecentTransactionsByAccountId(accountId);
-        console.log(accountDetails);
         console.log(balanceDetails);
+
+        const recentTransactions = await getTransactionsByAccountId(accountId);
+        // console.log(accountDetails);
         console.log(recentTransactions);
 
         /* const response = {
