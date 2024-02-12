@@ -1,5 +1,4 @@
 const express = require('express');
-const { Router } = require('express');
 const { insertTransaction, count, findById, findByTerm } = require('./database');
 const { validationFilter, errorHandler } = require('./middleware');
 const bodyParser = require('body-parser');
@@ -9,15 +8,13 @@ const process = require('process');
 const TIMEOUT = Number(process.env.REQ_TIMEOUT) || 5000;
 
 const app = express();
-const transactionsRouter = Router();
 
 app.use(bodyParser.json());
-app.use('/clientes', transactionsRouter);
 
-transactionsRouter.post('/:id/transacoes', validationFilter, (req, res, _) => {
-    const { id, valor, descricao, tipo } = req;
-    // find by id
-    // test everything before do another request
+app.post('/clientes/:id/transacoes', validationFilter, (req, res, _) => {
+    const { descricao, tipo } = req.body;
+    let { valor } = req.body;
+    let { id } = req.params;
     insertTransaction(id, valor, descricao, tipo).then((result) => {
         console.log(result);
         res.status(200).location(`/pessoas/${id}`).end();
@@ -26,39 +23,43 @@ transactionsRouter.post('/:id/transacoes', validationFilter, (req, res, _) => {
     });
 });
 
-transactionsRouter.get('/:id', (req, res, _) => {
-    findById(req.params.id).then((queryResult) => {
-        const [result] = queryResult.rows;
-        if (!result) {
-            return res.status(404).end();
-        }
-        res.json(result).end();
-    }).catch(() => {
-        res.status(404).end();
-    });
+app.get('/clientes/:id/extrato', async (req, res, _) => {
+    try {
+        let { accountId } = req.params;
+        accountId = +accountId;
+        console.log(accountId);
+        // if (isNaN(accountId)) return res.status(404).end();
+
+        const accountDetails = await getAccountDetailsById(accountId);
+        // if (!accountDetails) return res.status(404).end();
+
+        const balanceDetails = await getBalanceByAccountId(accountId);
+        // if (!balanceDetails) return res.status(404).end();
+
+        const recentTransactions = await getRecentTransactionsByAccountId(accountId);
+        console.log(accountDetails);
+        console.log(balanceDetails);
+        console.log(recentTransactions);
+
+        /* const response = {
+            saldo: {
+                total: balanceDetails.amount, 
+                data_extrato: new Date().toISOString(), // Data atual como exemplo
+                limite: accountDetails.limit_amount 
+            },
+            ultimas_transacoes: recentTransactions.map(tx => ({
+                valor: tx.amount,
+                tipo: tx.transaction_type,
+                descricao: tx.description,
+                realizada_em: tx.date.toISOString()
+            }))
+        }; */
+
+        res.status(200)/* .json(response) */;
+    } catch (err) {
+        return res.status(404).end();
+    }
 });
-
-transactionsRouter.get('/', (req, res, _) => {
-    if (!req.query['t']) {
-        return res.status(400).end();
-    };
-
-    findByTerm(req.query.t).then((queryResults) => {
-        res.json(queryResults.rows).end();
-    }).catch(() => {
-        res.status(404).end();
-    });
-});
-
-app.get('/contagem-pessoas', (_, res) => {
-    count().then((queryResult) => {
-        const [countResult] = queryResult.rows;
-        res.json(countResult).end();
-    }).catch(() => {
-        res.status(422).end();
-    });
-});
-
 app.use(errorHandler);
 
 const numForks = Number(process.env.CLUSTER_WORKERS) || 1;
