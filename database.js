@@ -28,33 +28,37 @@ module.exports.insertTransaction = async function (account_id, amount, descripti
     try {
         await client.query('BEGIN'); // Inicia a transação
 
-        // Consulta o saldo atual e o limite
-        const { rows: [balance] } = await client.query(`
-            SELECT b.amount, a.limit_amount
-            FROM balances b
-            JOIN accounts a ON b.account_id = a.id
-            WHERE b.account_id = $1
-        `, [account_id]);
+        // CTE para atualizar o saldo e retornar os valores atualizados
+        const updateBalanceQuery = `
+            WITH updated_balance AS (
+                UPDATE balances
+                SET amount = amount + $1
+                WHERE account_id = $2
+                RETURNING amount
+            ), inserted_transaction AS (
+                INSERT INTO transactions (account_id, amount, description, transaction_type)
+                VALUES ($2, $3, $4, $5)
+                RETURNING id
+            )
+            SELECT ub.amount AS saldo, a.limit_amount AS limite
+            FROM updated_balance ub
+            JOIN accounts a ON a.id = $2
+        `;
 
-        // Verifica se a transação é de débito e se excederá o limite
-        if (transaction_type === 'd' && (balance.amount - amount) < -balance.limit_amount) {
+        // Calcula o valor de ajuste de acordo com o tipo de transação
+        const adjustAmount = transaction_type === 'c' ? amount : -amount;
+
+        const { rows: [result] } = await client.query(updateBalanceQuery, [adjustAmount, account_id, amount, description, transaction_type]);
+
+        // Verifica se o saldo resultante excede o limite
+        if (transaction_type === 'd' && result.saldo < -result.limite) {
             throw new Error('Saldo insuficiente para realizar a transação.');
         }
 
-        // Insere a transação
-        await client.query(`
-            INSERT INTO transactions (account_id, amount, description, transaction_type)
-            VALUES ($1, $2, $3, $4)
-        `, [account_id, amount, description, transaction_type]);
-
-        // Atualiza o saldo
-        await client.query(`
-            UPDATE balances
-            SET amount = amount + $2
-            WHERE account_id = $1
-        `, [account_id, transaction_type === 'c' ? amount : -amount]);
-
         await client.query('COMMIT'); // Confirma a transação
+
+        return result; // Retorna o saldo e limite atualizados
+
     } catch (err) {
         await client.query('ROLLBACK'); // Desfaz a transação em caso de erro
         throw err;
