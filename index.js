@@ -1,5 +1,5 @@
 const express = require('express');
-const { insertTransaction, getBalanceByAccountId } = require('./database');
+const { insertTransaction, getBalanceByAccountId, getTransactionsByAccountId } = require('./database');
 const { validationFilter, errorHandler } = require('./middleware');
 const bodyParser = require('body-parser');
 const cluster = require('cluster');
@@ -16,10 +16,9 @@ app.post('/clientes/:id/transacoes', validationFilter, (req, res, _) => {
     let { valor } = req.body;
     let { id } = req.params;
     insertTransaction(id, valor, descricao, tipo).then((result) => {
-        console.log(result);
-        res.status(200).location(`/pessoas/${id}`).end();
+        return res.status(200).json(result);
     }).catch(() => {
-        res.status(422).end();
+        return res.status(422).end();
     });
 });
 
@@ -27,40 +26,31 @@ app.get('/clientes/:id/extrato', async (req, res, _) => {
     try {
         const { id } = req.params;
         const accountId = +id;
-        console.log(accountId);
-        // if (isNaN(accountId)) return res.status(404).end();
+        if (isNaN(accountId)) return res.status(404).end();
 
-        // Promisse All
-        // const accountDetails = await getAccountDetailsById(accountId);
-        // if (!accountDetails) return res.status(404).end();
+        const [recentTransactions, balanceDetails] = await Promise.all([
+            getTransactionsByAccountId(accountId),
+            getBalanceByAccountId(accountId)
+        ]);
 
-        const balanceDetails = await getBalanceByAccountId(accountId);
-        // if (!balanceDetails) return res.status(404).end();
-        console.log(balanceDetails);
+        if (!recentTransactions || !balanceDetails) {
+            return res.status(404).end();
+        }
 
-        const recentTransactions = await getTransactionsByAccountId(accountId);
-        // console.log(accountDetails);
-        console.log(recentTransactions);
-
-        /* const response = {
+        const response = {
             saldo: {
-                total: balanceDetails.amount, 
-                data_extrato: new Date().toISOString(), // Data atual como exemplo
-                limite: accountDetails.limit_amount 
+                ...recentTransactions,
+                data_extrato: new Date()
             },
-            ultimas_transacoes: recentTransactions.map(tx => ({
-                valor: tx.amount,
-                tipo: tx.transaction_type,
-                descricao: tx.description,
-                realizada_em: tx.date.toISOString()
-            }))
-        }; */
+            ultimas_transacoes: balanceDetails
+        };
 
-        res.status(200)/* .json(response) */;
+        return res.status(200).json(response);
     } catch (err) {
         return res.status(404).end();
     }
 });
+
 app.use(errorHandler);
 
 const numForks = Number(process.env.CLUSTER_WORKERS) || 1;

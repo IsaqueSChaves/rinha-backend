@@ -54,20 +54,18 @@ module.exports.insertTransaction = async function (account_id, amount, descripti
         await client.query('COMMIT');
         return result;
     } catch (err) {
-        await client.query('ROLLBACK'); // Desfaz a transação em caso de erro
+        await client.query('ROLLBACK');
         throw err;
     } finally {
-        client.release(); // Libera a conexão de cliente
+        client.release();
     }
 };
 
 module.exports.getBalanceByAccountId = async function (account_id) {
     const query = `
         SELECT
-            a.id,
-            a.name,
-            a.limit_amount,
-            b.amount AS balance
+            a.limit_amount AS limite,
+            b.amount AS total
         FROM accounts a
         JOIN balances b ON a.id = b.account_id
         WHERE a.id = $1;
@@ -90,14 +88,4 @@ module.exports.getTransactionsByAccountId = async function (account_id) {
     `;
     const { rows } = await pool.query(query, [account_id]);
     return rows;
-};
-
-module.exports.updateBalance = async function (account_id, amount) {
-    const query = `
-    UPDATE balances
-    SET amount = amount + $2
-    WHERE account_id = $1
-    RETURNING id, account_id, amount;`;
-    const { rows } = await pool.query(query, [account_id, amount]);
-    return rows[0];
 };
